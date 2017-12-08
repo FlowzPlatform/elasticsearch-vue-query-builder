@@ -1,19 +1,29 @@
 <template>
   <div id="app">
-    <div class="row">
+    <div>
+      <div class="col-md-2" style="margin-top:3%">
+      <span><b>EsUrl: </b></span>
+      <input v-model="esUrl" placeholder="Please input esUrl" style="margin-left:1%">
+     </div>
+     <div class="col-md-2" style="margin-top:3%">
+      <span><b>Index: </b></span>
+      <input v-model="index" placeholder="Please input index" style="margin-left:1%">
+    </div>
+     <div class="col-md-4" style="margin-top:3%">
+      <span><b>Type:</b></span>
+      <input v-model="type" placeholder="Please input type" style="margin-left:1%">
+      <button @click="Generate()" style="margin-left:5%">Generate fields</button>
+    </div>
+  </div>
+    <div>
       <div class="col-md-6">
         <h2>Basic Demo</h2>
         <div>
-          <div>
-            <div>
                 <vue-query-builder :rules="basicDemoRules"
                 :maxDepth="2"
-                :initialQuery="basicDemoInitialQuery"
                 @queryUpdated="basicDemoQueryUpdated"
                 :labels="basicLabels"
                 ></vue-query-builder>
-              </div>
-            </div>
           </div>
       </div>
       <div class="col-md-6">
@@ -30,11 +40,12 @@
 import VueQueryBuilder from 'vue-query-builder';
 import RangeInput from './RangeInput';
 import Vue from 'vue'
+import axios from 'axios'
 var must = []
 var should = []
 var must2 = []
 var should2 = []
-
+var data2 = []
 export default {
   name: 'app',
 
@@ -55,9 +66,305 @@ export default {
       document.dispatchEvent( new Event('rerender-prism') );
     });
   },
+  getNestedmapping(key,type,mappings_obj){
+    let parent_key = key
+    var self = this
+    console.log("inside getNestedmapping",type,mappings_obj)
+    for(var key in mappings_obj ) {
+      console.log("inside for loop")
+      let type1 = mappings_obj[key].type
+      console.log("type1...",type1)
+       if(type1 == "string" || type1 == "text" || type1 == "keyword"){
+         data2.push({"type":"text","id":parent_key + " => " + key,"label":parent_key + " => " + key,"operators":['equals','contains','does not contain','is empty','is not empty','begins with','ends with','exact match','match phrase prefix']})
+       }
+       else if(type1 == "integer" || type1 == "double" ||  type1 == "long" || type1 == "float" || type1 == "short" || type1 == "byte" || type1 == "half_float" || type1 == "scaled float"){
+         data2.push({"type":"numeric","id":parent_key + " => " + key,"label":parent_key + " => " + key,"operators":['equals','contains','does not contain','is empty','is not empty','begins with','ends with','exact match','match phrase prefix']},
+                    {"type":"custom-component","component":RangeInput,"id":parent_key + " => " + key + "-Range","label":parent_key + " => " + key + "-Range","operators":['gt','lt','gte','lte','gt & lt','gte & lte','gt & lte','gte & lt'],"default":1})
+       }
+       else if(type1 == "integer_range" || type1 == "double_range" || type1 == "long_range" || type1 == "float_range"){
+         data2.push({"type":"custom-component","component":RangeInput,"id":parent_key + " => " + key,"label":parent_key + " => " + key,"operators":['gt','lt','gte','lte','gt & lt','gte & lte','gt & lte','gte & lt'],"default":1})
+       }
+       else if(type1 == "nested"){
+         var nested = self.getNestedmapping(parent_key + " => " + key,type1,mappings_obj[key].properties)
+       }
+   }
+   return 1
+  },
+  Generate(){
+    console.log("called....",this.esUrl,this.index,this.type)
+    var url = this.esUrl;
+    var index = this.index;
+    var type = this.type;
+    var self = this
+    axios.get('http://localhost:3030/querybuilder-api', {
+    params: {
+      url: url,
+      index:index,
+      type: type
+    }
+  })
+     .then(function (response) {
+       console.log("Response....................",response);
+       let mappings_obj = response.data[index]["mappings"][type]
+       console.log("++++++++++++",mappings_obj)
+       data2.length = 0
+       for(var key in mappings_obj.properties ) {
+         let type = mappings_obj.properties[key].type
+          if(type == "string" || type == "text" || type == "keyword"){
+            data2.push({"type":"text","id":key,"label":key,"operators":['equals','contains','does not contain','is empty','is not empty','begins with','ends with','exact match','match phrase prefix']})
+          }
+          else if(type == "integer" || type == "double" ||  type == "long" || type == "float" || type == "short" || type == "byte" || type == "half_float" || type == "scaled float"){
+            data2.push({"type":"numeric","id":key,"label":key,"operators":['equals','contains','does not contain','is empty','is not empty','begins with','ends with','exact match','match phrase prefix']},
+                       {"type":"custom-component","component":RangeInput,"id":key + "-Range","label":key + "-Range","operators":['gt','lt','gte','lte','gt & lt','gte & lte','gt & lte','gte & lt'],"default":1})
+          }
+          else if(type == "integer_range" || type == "double_range" || type == "long_range" || type == "float_range"){
+            data2.push({"type":"custom-component","component":RangeInput,"id":key,"label":key,"operators":['gt','lt','gte','lte','gt & lt','gte & lte','gt & lte','gte & lt'],"default":1})
+          }
+          else if(type == "nested"){
+            var nested = self.getNestedmapping(key,type,mappings_obj.properties[key].properties)
+            console.log("nested.............",nested)
+          }
+      }
+      console.log("dataaaa.............",data2)
+     })
+     .catch(function (error) {
+       console.log("Error....................",error);
+     });
+
+  },
+  depthCheck(must,i){
+    console.log("depthCheck called",must,i)
+    for(var key in must){
+      console.log("for loop called",key)
+         if(key == "query"){
+           console.log("query......called",must.query,must["query"])
+           if(Object.keys(must["query"]).length != 0 ){
+             console.log("inner loop called.......")
+             var s = this.depthCheck(must["query"]["nested"],i)
+             console.log("********* s",s)
+          }
+         }
+    }
+    return must["query"]
+  },
+  Query(pushObject,selectedOperand,value,query,children,type){
+    if(children.query.selectedOperator == "equals"){
+        pushObject["term"] = {}
+        pushObject["term"][selectedOperand] = value
+    }
+    else if(children.query.selectedOperator == "contains"){
+        pushObject["match"] = {}
+        pushObject["match"][selectedOperand] = value
+    }
+    else if(children.query.selectedOperator == "does not contain"){
+      pushObject["bool"] = {}
+      pushObject["bool"]["must_not"] = [{"match":{}}]
+      pushObject["bool"]["must_not"][0]["match"][selectedOperand] = value
+    }
+    else if(children.query.selectedOperator == "is empty"){
+      pushObject["bool"] = {}
+      pushObject["bool"]["must_not"] = [{"exists":{}}]
+      pushObject["bool"]["must_not"][0]["exists"]["field"] =  selectedOperand
+  }
+    else if(children.query.selectedOperator == "is not empty"){
+      pushObject["exists"] = {}
+      pushObject["match"]["field"] = selectedOperand
+    }
+    else if(children.query.selectedOperator == "begins with"){
+      pushObject["prefix"] = {}
+      pushObject["prefix"][selectedOperand] = value
+  }
+    else if(children.query.selectedOperator == "ends with"){
+      pushObject["wildcard"] = {}
+      pushObject["wildcard"][selectedOperand] = "*" + value
+    }
+    else if(children.query.selectedOperator == "exact match"){
+        pushObject["match_phrase"] = {}
+        pushObject["match_phrase"][selectedOperand] =  value
+  }
+  else if(children.query.selectedOperator == "match phrase prefix"){
+      pushObject["match_phrase_prefix"] = {}
+      pushObject["match_phrase_prefix"][selectedOperand] =  value
+  }
+  else {
+    var selectedOperator = children.query.selectedOperator
+    var replace = "-Range"
+    var selectedOperand = selectedOperand.replace(replace,"")
+    if(selectedOperator == 'gt' || selectedOperator == 'lt' ||selectedOperator == 'gte' || selectedOperator == 'lte'){
+      pushObject["range"] = {}
+      pushObject["range"][selectedOperand] = {}
+      pushObject["range"][selectedOperand][selectedOperator] =  value
+   }
+   else if(selectedOperator == 'gt & lt'){
+       pushObject["range"] = {}
+       pushObject["range"][selectedOperand] = {}
+       pushObject["range"][selectedOperand]['lt'] =  value
+       pushObject["range"][selectedOperand]['gt'] =  0
+    }
+  else if(selectedOperator == 'gte & lte'){
+      pushObject["range"] = {}
+      pushObject["range"][selectedOperand] = {}
+      pushObject["range"][selectedOperand]['lte'] =  value
+      pushObject["range"][selectedOperand]['gte'] =  0
+ }
+ else if(selectedOperator == 'gt & lte'){
+     pushObject["range"] = {}
+     pushObject["range"][selectedOperand] = {}
+     pushObject["range"][selectedOperand]['lte'] = value
+     pushObject["range"][selectedOperand]['gt'] =  0
+}
+  else if(selectedOperator == 'gte & lt'){
+    pushObject["range"] = {}
+    pushObject["range"][selectedOperand] = {}
+    pushObject["range"][selectedOperand]['lt'] =  value
+    pushObject["range"][selectedOperand]['gte'] =  0
+  }
+  }
+},
+  pushObject(must,selectedOperand,i){
+    console.log("LLLLLLLLLLLLLLL",must)
+    if(must["nested"] != undefined){
+      console.log("else called")
+       var depthCheck = this.depthCheck(must["nested"],i)
+       console.log("depth...",depthCheck)
+       return depthCheck
+    }
+
+  },
   createQuery(query,children,type,i){
     var selectedOperand = children.query.selectedOperand
     var value = children.query.value
+    var pushObject
+    var flag
+    console.log("Ektaaa....................",selectedOperand,selectedOperand.indexOf("=>"))
+    if(selectedOperand.indexOf("=>") != -1){
+      console.log("called.............................")
+      var count = selectedOperand.split(" => ")
+      console.log("==========",count)
+      if(type == "query-builder-rule" && query.logicalOperator == "All"){
+        if(must["nested"] == undefined){
+          console.log("+++++++++++++++++ query builder rule all")
+          must.push({"nested":{"path":selectedOperand.split(' => ')[0]}})
+          console.log("must....",must)
+          must[i]["nested"]["query"] = {}
+          pushObject = must[i]["nested"]["query"]
+          flag = false
+
+          for(var k=0 ;k < count.length - 2 ; k++){
+             console.log("k...",k)
+             pushObject = this.pushObject(must[i],selectedOperand,i,k)
+             console.log("push....",pushObject,selectedOperand.split(' => ')[k+1])
+             pushObject["nested"] = {}
+             pushObject["nested"]["path"] = selectedOperand.split(' => ')[k+1]
+             pushObject["nested"]["query"] = {}
+             console.log("push ++++++++++++",pushObject)
+              flag = true
+          }
+
+            if(flag == true){
+             pushObject = pushObject["nested"]["query"]
+             selectedOperand = count[count.length-2] + "." + count[count.length-1]
+             var query3 = this.Query(pushObject,selectedOperand.replace(" => ","."),value,query,children,type)
+           }
+           else if(flag == false){
+            var query3 = this.Query(pushObject,selectedOperand.replace(" => ","."),value,query,children,type)
+           }
+
+
+
+
+         }
+    }
+    else if(type == "query-builder-rule" && query.logicalOperator == "Any"){
+      if(should["nested"] == undefined){
+        console.log("+++++++++++++++++ query builder rule any")
+        should.push({"nested":{"path":selectedOperand.split(' => ')[0]}})
+        should[i]["nested"]["query"] = {}
+        pushObject = should[i]["nested"]["query"]
+        flag = false
+
+        for(var k=0 ;k < count.length - 2 ; k++){
+           console.log("k...",k)
+           pushObject = this.pushObject(should[i],selectedOperand,i,k)
+           console.log("push....",pushObject)
+           pushObject["nested"] = {}
+           pushObject["nested"]["path"] = selectedOperand.split(' => ')[k+1]
+           pushObject["nested"]["query"] = {}
+           flag = true
+        }
+         if(flag == true){
+           pushObject = pushObject["nested"]["query"]
+           selectedOperand = count[count.length-2] + "." + count[count.length-1]
+           var query3 = this.Query(pushObject,selectedOperand.replace(" => ","."),value,query,children,type)
+         }
+         else if(flag == false){
+           var query3 = this.Query(pushObject,selectedOperand.replace(" => ","."),value,query,children,type)
+         }
+
+       }
+    }
+    else if(type == "query-builder-group" && query.logicalOperator == "All"){
+      if(must2["nested"] == undefined){
+        console.log("+++++++++++++++++ query builder group all")
+        must2.push({"nested":{"path":selectedOperand.split(' => ')[0]}})
+        must2[i]["nested"]["query"] = {}
+        pushObject = must2[i]["nested"]["query"]
+        flag = false
+
+        for(var k=0 ;k < count.length - 2 ; k++){
+           console.log("k...",k)
+           pushObject = this.pushObject(must2[i],selectedOperand,i,k)
+           console.log("push....",pushObject)
+           pushObject["nested"] = {}
+           pushObject["nested"]["path"] = selectedOperand.split(' => ')[k+1]
+           pushObject["nested"]["query"] = {}
+          flag = true
+        }
+
+        if(flag == true){
+          pushObject = pushObject["nested"]["query"]
+          selectedOperand = count[count.length-2] + "." + count[count.length-1]
+          var query3 = this.Query(pushObject,selectedOperand.replace(" => ","."),value,query,children,type)
+        }
+        else if(flag == false){
+           var query3 = this.Query(pushObject,selectedOperand.replace(" => ","."),value,query,children,type)
+        }
+
+       }
+    }
+    else if(type == "query-builder-group" && query.logicalOperator == "Any"){
+      if(should2["nested"] == undefined){
+        console.log("+++++++++++++++++ query builder group any")
+      should2.push({"nested":{"path":selectedOperand.split(' => ')[0]}})
+        should2[i]["nested"]["query"] = {}
+        pushObject = should2[i]["nested"]["query"]
+        flag = false
+
+        for(var k=0 ;k < count.length - 2 ; k++){
+           console.log("k...",k)
+           pushObject = this.pushObject(should2[i],selectedOperand,i,k)
+           console.log("push....",pushObject,selectedOperand.split(' => ')[k+1])
+           pushObject["nested"] = {}
+           pushObject["nested"]["path"] = selectedOperand.split(' => ')[k+1]
+           pushObject["nested"]["query"] = {}
+           flag = true
+        }
+
+         if(flag == true){
+           pushObject = pushObject["nested"]["query"]
+           selectedOperand = count[count.length-2] + "." + count[count.length-1]
+           var query3 = this.Query(pushObject,selectedOperand.replace(" => ","."),value,query,children,type)
+         }
+         else if(flag == false){
+           var query3 = this.Query(pushObject,selectedOperand.replace(" => ","."),value,query,children,type)
+        }
+
+       }
+    }
+
+  }
+    else {
+      console.log("called.........2.....................")
     if(children.query.selectedOperator == "equals"){
       if(type == "query-builder-rule" && query.logicalOperator == "All"){
         must.push({"term":{}})
@@ -220,8 +527,10 @@ export default {
    should2[i]["match_phrase_prefix"][selectedOperand] =  value
 }
   }
-  else if(children.query.selectedOperand == "Price"){
+  else {
     var selectedOperator = children.query.selectedOperator
+    var replace = "-Range"
+    var selectedOperand = selectedOperand.replace(replace,"")
     if(type == "query-builder-rule" && (selectedOperator == 'gt' || selectedOperator == 'lt' ||selectedOperator == 'gte' || selectedOperator == 'lte') && query.logicalOperator == "All"){
       must.push({"range":{}})
       must[i]["range"] = {}
@@ -359,6 +668,7 @@ else if(type == "query-builder-group" && selectedOperator == 'gte & lt' && query
   should2[i]["range"][selectedOperand]['gte'] =  0
 }
 }
+}
 return 1
 },
   convertToElastic(query){
@@ -408,69 +718,39 @@ return 1
 
   data () {
       return {
-        basicDemoInitialQuery: {
-          "logicalOperator": "All",
-          "children": [
-            {
-              "type": "query-builder-rule",
-              "query": {
-                "rule": "first-name",
-                "selectedOperator": "equals",
-                "selectedOperand": "First Name",
-                "value": "ABC"
-              }
-            },
-            {
-              "type": "query-builder-group",
-              "query": {
-                "logicalOperator": "All",
-                "children": [
-                  {
-                    "type": "query-builder-rule",
-                    "query": {
-                      "rule": "first-name",
-                      "selectedOperator": "equals",
-                      "selectedOperand": "First Name",
-                      "value": "John"
-                    }
-                  },
-                  {
-                    "type": "query-builder-rule",
-                    "query": {
-                      "rule": "first-name",
-                      "selectedOperator": "equals",
-                      "selectedOperand": "First Name",
-                      "value": "Sally"
-                    }
-                  }
-                ]
-              }
-            }
-          ]
-        },
         basicDemoQuery: null,
-        basicDemoRules: [
-          {
-            type: "text",
-            id: "first-name",
-            label: "First Name",
-            operators: ['equals','contains','does not contain','is empty','is not empty','begins with','ends with','exact match','match phrase prefix']
-          },
-          {
-            type: "text",
-            id: "last-name",
-            label: "Last Name",
-            operators: ['equals','contains','does not contain','is empty','is not empty','begins with','ends with','exact match','match phrase prefix']
-          },
-          {
-            type: "custom-component",
-            component: RangeInput,
-            id: 'price',
-            label: 'Price',
-            operators: ['gt','lt','gte','lte','gt & lt','gte & lte','gt & lte','gte & lt'],
-            default: 1
-          }
-        ],
+        basicDemoRules: data2,
+        // basicDemoRules: [
+        //   {
+        //     type: "numeric",
+        //     id: "first-name",
+        //     label: "First Name",
+        //     operators: ['equals','contains','does not contain','is empty','is not empty','begins with','ends with','exact match','match phrase prefix']
+        //   },
+        //   {
+        //     type: "text",
+        //     id: "last-name",
+        //     label: "Last Name",
+        //     operators: ['equals','contains','does not contain','is empty','is not empty','begins with','ends with','exact match','match phrase prefix']
+        //   },
+        //   {
+        //     type: "custom-component",
+        //     component: RangeInput,
+        //     id: 'price',
+        //     label: 'Price',
+        //     operators: ['gt','lt','gte','lte','gt & lt','gte & lte','gt & lte','gte & lt'],
+        //     default: 1
+        //   }
+        //   {
+        //   type: "select",
+        //   id: 'age',
+        //   label: 'Age',
+        //   choices: [{"label": "min","value":"min"},{"label":"max","value":"max"},{"label":"sum","value":"sum"}],
+        //   operands: [
+        //     'Aggregation'
+        //   ]
+        // }
+        // ],
         basicLabels : {
             matchType: "Match Type",
             matchTypeAll: "All",
@@ -480,8 +760,16 @@ return 1
             addGroup: "Add Group",
             removeGroup: "&times;",
             textInputPlaceholder: "value",
-        }
+        },
+        esUrl: 'http://localhost:9200',
+        index: 'product',
+        type: 'product'
       }
+  },
+  mounted(){
+    let self = this
+
+
   }
 }
 </script>
