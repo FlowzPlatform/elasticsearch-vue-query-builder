@@ -9,18 +9,28 @@
       <span><b>Index: </b></span>
       <input v-model="index" placeholder="Please input index" style="margin-left:1%">
     </div>
-     <div class="col-md-4" style="margin-top:3%">
-      <span><b>Type:</b></span>
+     <div class="col-md-2" style="margin-top:3%">
+      <span><b>Type: </b></span>
       <input v-model="type" placeholder="Please input type" style="margin-left:1%">
-      <button @click="Generate()" style="margin-left:5%">Generate fields</button>
     </div>
+    <div class="col-md-2" style="margin-top:3%">
+     <span><b>User: </b></span>
+     <input v-model="username" placeholder="Please input username" style="margin-left:1%">
+   </div>
+   <div class="col-md-2" style="margin-top:3%">
+    <span><b>Password: </b></span>
+    <input type="password" v-model="password" placeholder="Please input password" style="margin-left:1%">
+  </div>
+  <div class="col-md-2" style="margin-top:3%">
+    <button @click="Generate()" style="margin-left:1%">Generate fields</button>
+ </div>
   </div>
     <div>
       <div class="col-md-6">
         <h2>Basic Demo</h2>
         <div>
                 <vue-query-builder :rules="basicDemoRules"
-                :maxDepth="2"
+                :maxDepth="3"
                 @queryUpdated="basicDemoQueryUpdated"
                 :labels="basicLabels"
                 ></vue-query-builder>
@@ -39,8 +49,10 @@
 import VueQueryBuilder from 'vue-query-builder';
 import RangeInput from './RangeInput';
 import Vue from 'vue'
+// import iView from 'iview'
 import axios from 'axios'
 import bodybuilder from 'bodybuilder'
+// Vue.use(iView);
 var data2 = []
 export default {
   name: 'app',
@@ -49,21 +61,19 @@ export default {
   },
   methods: {
     basicDemoQueryUpdated (query) {
-      console.log("query...",query)
-      var elastic_query = this.convertToElastic(query)
-      console.log("elastic_query...................",elastic_query)
+      // console.log("query...",query)
+      let elastic_query = this.convertToElastic(query)
       this.basicDemoQuery = query;
 
     Vue.nextTick(function () {
-      var basicDemoOutput = document.getElementById('basic-demo-output');
-      console.log("++++++++++",basicDemoOutput)
+      let basicDemoOutput = document.getElementById('basic-demo-output');
       basicDemoOutput.innerHTML = JSON.stringify(elastic_query, null, 2);
       document.dispatchEvent( new Event('rerender-prism') );
     });
   },
   getNestedmapping(key,type,mappings_obj){
     let parent_key = key
-    var self = this
+    let self = this
     for(var key in mappings_obj ) {
       let type1 = mappings_obj[key].type
        if(type1 == "string" || type1 == "text" || type1 == "keyword"){
@@ -84,7 +94,7 @@ export default {
   },
   getMapping(key,type,mappings_obj){
     let parent_key = key
-    var self = this
+    let self = this
     for(var key in mappings_obj ) {
       let type1 = mappings_obj[key].type
        if(type1 == "string" || type1 == "text" || type1 == "keyword"){
@@ -107,15 +117,19 @@ export default {
    return 1
   },
   Generate(){
-    var url = this.esUrl;
-    var index = this.index;
-    var type = this.type;
-    var self = this
-    axios.get('http://localhost:3030/querybuilder-api', {
+    let url = this.esUrl;
+    let index = this.index;
+    let type = this.type;
+    let username = this.username;
+    let password = this.password;
+    let self = this
+    axios.get('http://localhost:3031/querybuilder-api', {
     params: {
       url: url,
       index:index,
-      type: type
+      type: type,
+      username: username,
+      password: password
     }
   })
      .then(function (response) {
@@ -147,47 +161,45 @@ export default {
 
   },
   convertToElastic(query){
-    var body = bodybuilder()
+    let body = bodybuilder()
     for(var i=0;i<query.children.length;i++){
       if(query.children[i].type == "query-builder-rule"){
         body = this.recursion(body,query.children[i],query.logicalOperator,query.children[i].type,query.children[i].query.selectedOperand,query.children[i].query.selectedOperator,query.children[i].query.value)
       }
       else if(query.children[i].type == "query-builder-group"){
-        console.log("---------query-builder-group----------",query.children[i])
+        // console.log("---------query-builder-group----------",query.children[i])
         if(query.logicalOperator == "All"){
           let body_group = this.queryBuilderGroup(query.children[i].query,query.children[i].query.logicalOperator)
           body = body.query("bool",b => body_group)
-          console.log("body_group....................",body)
        }
        else if(query.logicalOperator == "Any"){
          let body_group = this.queryBuilderGroup(query.children[i].query,query.children[i].query.logicalOperator)
          body = body.orQuery("bool",b => body_group)
-         console.log("body_group....................",body)
        }
       }
     }
     var elastic_query = body.build()
-    console.log("+++++++++++++",elastic_query)
+    // console.log("+++++++++++++",elastic_query)
     return elastic_query
 
   },
   queryBuilderGroup(query,logicalOperator){
-    var body1 = bodybuilder()
+    let body1 = bodybuilder()
     for(var i=0;i<query.children.length;i++){
       if(query.children[i].type == "query-builder-rule"){
-        body1 = this.recursion(body1,query.children[i],query.logicalOperator,query.children[i].type,query.children[i].query.selectedOperand,query.children[i].query.selectedOperator,query.children[i].query.value)
+        body1 = this.filter(body1,query.children[i],query.logicalOperator,query.children[i].type,query.children[i].query.selectedOperand,query.children[i].query.selectedOperator,query.children[i].query.value)
       }
       else if(query.children[i].type == "query-builder-group"){
-        console.log("---------query-builder-group----------",query.children[i])
+        // console.log("---------query-builder-group----------",query.children[i])
         if(logicalOperator == "All"){
           let body_group = this.queryBuilderGroup(query.children[i].query,query.children[i].query.logicalOperator)
-          body1 = body1.query("bool",b => body_group)
-          console.log("body_group....................",body1)
+          body1 = body1.filter("bool",b => body_group)
+          // console.log("body_group....................",body1)
         }
         else if(logicalOperator == "Any"){
           let body_group = this.queryBuilderGroup(query.children[i].query,query.children[i].query.logicalOperator)
-          body1 = body1.orQuery("bool",b => body_group)
-          console.log("body_group....................",body1)
+          body1 = body1.orFilter("bool",b => body_group)
+          // console.log("body_group....................",body1)
         }
 
       }
@@ -195,17 +207,20 @@ export default {
     return body1
   },
   recursion(body,query,logicalOperator,type,selectedOperand,selectedOperator,value){
-    console.log(selectedOperand)
+    // console.log(selectedOperand)
     if(logicalOperator == "All"){
       if(selectedOperand.indexOf("=>") != -1){
           let nested_array = selectedOperand.split(" => ")
           console.log("nested_array......",nested_array)
-          let selectedOperand1 = nested_array[nested_array.length-2] + "." + nested_array[nested_array.length-1]
-          let nestedQuery1 = this.recursion(bodybuilder(),query,logicalOperator,type,selectedOperand1,selectedOperator,value)
-          for(var i = nested_array.length ; i > nested_array.length-(nested_array.length-2) ; i--){
-            nestedQuery1 = bodybuilder().query('nested','path',nested_array[i-2],q => nestedQuery1)
-          }
-          body = body.query("nested","path",nested_array[0], q => nestedQuery1)
+          let selectedOperand1 = nested_array[0] + "." + nested_array[nested_array.length-1]
+          let nestedQuery1 = this.recursion(bodybuilder(),query,"All",type,selectedOperand1,selectedOperator,value)
+          let path = nested_array[0]
+          if(nested_array.length > 2){
+          for(var i=1 ; i < nested_array.length - 1 ; i++){
+            path = path +  "." + nested_array[i]
+         }
+       }
+          body = body.query("nested","path",path, q => nestedQuery1)
       }
       else if(selectedOperator == "equals"){
         body = body.query("term",selectedOperand,value)
@@ -253,14 +268,17 @@ export default {
     }
     else {
       if(selectedOperand.indexOf("=>") != -1){
-          let nested_array = selectedOperand.split(" => ")
-          console.log("nested_array......",nested_array)
-          let selectedOperand1 = nested_array[nested_array.length-2] + "." + nested_array[nested_array.length-1]
-          let nestedQuery1 = this.recursion(bodybuilder(),query,logicalOperator,type,selectedOperand1,selectedOperator,value)
-          for(var i = nested_array.length ; i > nested_array.length-(nested_array.length-2) ; i--){
-            nestedQuery1 = bodybuilder().query('nested','path',nested_array[i-2],q => nestedQuery1)
-          }
-          body = body.query("nested","path",nested_array[0], q => nestedQuery1)
+        let nested_array = selectedOperand.split(" => ")
+        console.log("nested_array......",nested_array)
+        let selectedOperand1 = nested_array[0] + "." + nested_array[nested_array.length-1]
+        let nestedQuery1 = this.recursion(bodybuilder(),query,"All",type,selectedOperand1,selectedOperator,value)
+        let path = nested_array[0]
+        if(nested_array.length > 2){
+        for(var i=1 ; i < nested_array.length - 1 ; i++){
+          path = path +  "." + nested_array[i]
+       }
+     }
+        body = body.orQuery("nested","path",path, q => nestedQuery1)
       }
       else if(selectedOperator == "equals"){
         body = body.orQuery("term",selectedOperand,value)
@@ -291,15 +309,15 @@ export default {
       }
       else {
         if(selectedOperator == 'gt' || selectedOperator == 'lt' || selectedOperator == 'gte' || selectedOperator == 'lte'){
-          var obj = {}
-          var selectedOperand = selectedOperand.replace("-Range","")
+          let obj = {}
+          let selectedOperand = selectedOperand.replace("-Range","")
           obj[selectedOperator] = value
           body = body.orQuery("range",selectedOperand,obj)
         }
         else {
-          var obj = {}
-          var selectedOperand = selectedOperand.replace("-Range","")
-          var selectedOperator = selectedOperator.split(' & ')
+          let obj = {}
+          let selectedOperand = selectedOperand.replace("-Range","")
+          let selectedOperator = selectedOperator.split(' & ')
           obj[selectedOperator[0]] = 0
           obj[selectedOperator[1]] = value
           body = body.orQuery("range",selectedOperand,obj)
@@ -307,8 +325,129 @@ export default {
       }
     }
     return body
+  },
+  filter(body,query,logicalOperator,type,selectedOperand,selectedOperator,value){
+    if(logicalOperator == "All"){
+      if(selectedOperand.indexOf("=>") != -1){
+        // console.log("index......",selectedOperand.indexOf("=>"))
+        let nested_array = selectedOperand.split(" => ")
+        // console.log("nested_array......",nested_array)
+        let selectedOperand1 = nested_array[0] + "." + nested_array[nested_array.length-1]
+        let nestedQuery1 = this.filter(bodybuilder(),query,"All",type,selectedOperand1,selectedOperator,value)
+        let path = nested_array[0]
+        if(nested_array.length > 2){
+        for(var i=1 ; i < nested_array.length - 1 ; i++){
+          path = path +  "." + nested_array[i]
+       }
+     }
+        body = body.filter("nested","path",path, q => nestedQuery1)
+      }
+      else if(selectedOperator == "equals"){
+        body = body.filter("term",selectedOperand,value)
+      }
+      else if(selectedOperator == "contains"){
+        body = body.filter("match",selectedOperand,value)
+      }
+      else if(selectedOperator == "does not contain"){
+        body = body.notFilter('match',selectedOperand,value)
+      }
+      else if(selectedOperator == "is empty"){
+        body = body.notFilter('exists',"field",selectedOperand)
+      }
+      else if(selectedOperator == "is not empty"){
+        body = body.filter("exists","field",selectedOperand)
+      }
+      else if(selectedOperator == "begins with"){
+        body = body.filter("prefix",selectedOperand,value)
+      }
+      else if(selectedOperator == "ends with"){
+        body = body.filter("wildcard",selectedOperand,"*" + value)
+      }
+      else if(selectedOperator == "match phrase prefix"){
+        body = body.filter("match_phrase_prefix",selectedOperand,value)
+      }
+      else if(selectedOperator == "exact match"){
+        body = body.filter("match_phrase",selectedOperand,value)
+      }
+      else {
+        if(selectedOperator == 'gt' || selectedOperator == 'lt' || selectedOperator == 'gte' || selectedOperator == 'lte'){
+          let obj = {}
+          let selectedOperand = selectedOperand.replace("-Range","")
+          obj[selectedOperator] = value
+          body = body.filter("range",selectedOperand,obj)
+        }
+        else {
+          let obj = {}
+          let selectedOperand = selectedOperand.replace("-Range","")
+          let selectedOperator = selectedOperator.split(' & ')
+          obj[selectedOperator[0]] = 0
+          obj[selectedOperator[1]] = value
+          body = body.filter("range",selectedOperand,obj)
+        }
+      }
+    }
+    else {
+      if(selectedOperand.indexOf("=>") != -1){
+        // console.log("index......",selectedOperand.indexOf("=>"))
+        //  console.log("index......",selectedOperand.indexOf("=>"))
+         let nested_array = selectedOperand.split(" => ")
+        //  console.log("nested_array......",nested_array)
+         let selectedOperand1 = nested_array[0] + "." + nested_array[nested_array.length-1]
+         let nestedQuery1 = this.filter(bodybuilder(),query,"All",type,selectedOperand1,selectedOperator,value)
+         let path = nested_array[0]
+         if(nested_array.length > 2){
+         for(var i=1 ; i < nested_array.length - 1 ; i++){
+           path = path +  "." + nested_array[i]
+        }
+      }
+         body = body.orFilter("nested","path",path, q => nestedQuery1)
+      }
+      else if(selectedOperator == "equals"){
+        body = body.orFilter("term",selectedOperand,value)
+      }
+      else if(selectedOperator == "contains"){
+        body = body.orFilter("match",selectedOperand,value)
+      }
+      else if(selectedOperator == "does not contain"){
+        body = body.notFilter("match",selectedOperand,value)
+      }
+      else if(selectedOperator == "is empty"){
+        body = body.notFilter("exists","field",selectedOperand)
+      }
+      else if(selectedOperator == "is not empty"){
+        body = body.orFilter("exists","field",selectedOperand)
+      }
+      else if(selectedOperator == "begins with"){
+        body = body.orFilter("prefix",selectedOperand,value)
+      }
+      else if(selectedOperator == "ends with"){
+        body = body.orFilter("wildcard",selectedOperand,"*" + value)
+      }
+      else if(selectedOperator == "match phrase prefix"){
+        body = body.orFilter("match_phrase_prefix",selectedOperand,value)
+      }
+      else if(selectedOperator == "exact match"){
+        body = body.orFilter("match_phrase",selectedOperand,value)
+      }
+      else {
+        if(selectedOperator == 'gt' || selectedOperator == 'lt' || selectedOperator == 'gte' || selectedOperator == 'lte'){
+          let obj = {}
+          let selectedOperand = selectedOperand.replace("-Range","")
+          obj[selectedOperator] = value
+          body = body.orFilter("range",selectedOperand,obj)
+        }
+        else {
+          let obj = {}
+          let selectedOperand = selectedOperand.replace("-Range","")
+          let selectedOperator = selectedOperator.split(' & ')
+          obj[selectedOperator[0]] = 0
+          obj[selectedOperator[1]] = value
+          body = body.orFilter("range",selectedOperand,obj)
+        }
+      }
+    }
+    return body
   }
-
 },
   data () {
       return {
@@ -326,7 +465,9 @@ export default {
         },
         esUrl: '',
         index: '',
-        type: ''
+        type: '',
+        username: '',
+        password: ''
       }
   }
 }

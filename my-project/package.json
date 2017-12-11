@@ -16,6 +16,7 @@
     "axios": "^0.17.1",
     "bodybuilder": "^2.2.6",
     "fs": "0.0.1-security",
+    "iview": "^2.7.4",
     "vue": "^2.5.2",
     "vue-router": "^3.0.1"
   },
